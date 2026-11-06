@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Thumbnails Gallery</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0b0d11; --fg:#e6e6e6; --muted:#9aa3af; --card:#111827; }
+    body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    header { padding:24px; max-width:1100px; margin:0 auto; }
+    h1 { margin:0 0 6px; font-size:24px; }
+    .sub { color:var(--muted); font-size:14px; }
+    #status { color:var(--muted); padding:0 24px; max-width:1100px; margin:0 auto; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; padding:24px; max-width:1100px; margin:0 auto; }
+    .card { background:var(--card); border-radius:16px; text-decoration:none; color:inherit; box-shadow:0 4px 10px rgba(0,0,0,.2); overflow:hidden; display:flex; flex-direction:column; }
+    img { width:100%; height:160px; object-fit:cover; display:block; background:#0b0d11; }
+    .name { padding:10px 12px; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    footer { color:var(--muted); text-align:center; padding:24px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Thumbnails Gallery</h1>
+    <div class="sub">Auto-discovered from the <code>thumbnails/</code> prefix.</div>
+    <div id="status">Loading…</div>
+  </header>
+  <main id="grid" class="grid"></main>
+  <footer>Generated in your browser</footer>
+
+<script>
+  const PREFIX = "thumbnails/";
+
+  function listingUrl(continuationToken) {
+    // When served from S3 Website Hosting, same-origin works:
+    const base = location.origin;
+    const params = new URLSearchParams({ "list-type": "2", "prefix": PREFIX, "max-keys": "1000" });
+    if (continuationToken) params.set("continuation-token", continuationToken);
+    return `${base}/?${params.toString()}`;
+  }
+  function objectUrl(key) { return `${location.origin}/${encodeURIComponent(key)}`; }
+
+  async function listAllKeys() {
+    const keys = [];
+    let token = null;
+    while (true) {
+      const res = await fetch(listingUrl(token));
+      if (!res.ok) throw new Error(`List error: ${res.status} ${res.statusText}`);
+      const xml = await res.text();
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+
+      const contents = Array.from(doc.getElementsByTagName("Contents"));
+      contents.forEach(c => {
+        const key = c.getElementsByTagName("Key")[0]?.textContent || "";
+        if (!key.endsWith("/") && /\.(jpe?g|png|webp|gif|bmp|tiff)$/i.test(key)) keys.push(key);
+      });
+
+      const isTruncated = doc.getElementsByTagName("IsTruncated")[0]?.textContent === "true";
+      if (!isTruncated) break;
+      token = doc.getElementsByTagName("NextContinuationToken")[0]?.textContent || null;
+    }
+    return keys;
+  }
+
+  function render(keys) {
+    const status = document.getElementById("status");
+    const grid = document.getElementById("grid");
+    if (!keys.length) { status.textContent = "No images found under thumbnails/."; return; }
+    status.textContent = `Loaded ${keys.length} thumbnails.`;
+
+    const frag = document.createDocumentFragment();
+    keys.forEach(k => {
+      const a = document.createElement("a");
+      a.className = "card"; a.href = objectUrl(k); a.target = "_blank"; a.rel = "noopener";
+      const img = document.createElement("img"); img.src = objectUrl(k); img.alt = k.split("/").pop(); img.loading = "lazy";
+      const name = document.createElement("div"); name.className = "name"; name.textContent = k.split("/").pop();
+      a.append(img, name); frag.appendChild(a);
+    });
+    grid.appendChild(frag);
+  }
+
+  (async () => {
+    try { render(await listAllKeys()); }
+    catch (e) { document.getElementById("status").textContent = "Error: " + (e?.message || e); console.error(e); }
+  })();
+</script>
+</body>
+</html>
