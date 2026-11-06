@@ -15,6 +15,27 @@ s3 = boto3.client(
      region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
 )
 
+from botocore.exceptions import ClientError
+
+
+def recorded_buckets_exist():
+    """Reuse the buckets from a previous run instead of creating new ones (avoids orphan buckets)."""
+    with shelve.open("aws_resources.db") as db:
+        names = [db.get("images-bucket"), db.get("thumbnails-bucket")]
+    if not all(names):
+        return False
+    try:
+        for name in names:
+            s3.head_bucket(Bucket=name)
+    except ClientError:
+        return False  # recorded but gone (e.g. deleted or new lab account): create new ones
+    print(f"Buckets already exist, reusing them: {names}")
+    return True
+
+
+if recorded_buckets_exist():
+    raise SystemExit(0)
+
 base_names = [
     "image-uploads-bucket",
     "image-thumbnails-bucket",

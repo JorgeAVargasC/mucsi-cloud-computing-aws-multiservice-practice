@@ -44,6 +44,22 @@ Las credenciales del lab caducan al cerrar la sesión: cuando las renueves, actu
 
 ---
 
+## **Despliegue completo con un solo comando**
+
+`deploy_all.py` ejecuta todos los pasos siguientes en orden (LabRole, buckets, cola, tabla, Lambda, trigger SQS, API Gateway, web estática y subida de imágenes), espera a que la Lambda procese las imágenes y prueba la API:
+
+```bash
+python deploy_all.py
+python deploy_all.py --skip-images   # sin subir img/ ni esperar el procesamiento
+python deploy_all.py --skip-test     # sin probar la API al final
+```
+
+Si un paso falla (por ejemplo, porque han caducado las credenciales), corrige el problema y vuelve a lanzarlo: los recursos que ya existen se reutilizan. Al final muestra las URLs de la API y de la web. Para borrarlo todo: `python remove_aws_resources.py --really-delete`.
+
+Los apartados siguientes explican cada paso por separado.
+
+---
+
 ## **Ejecución**
 
 ### 1. Crear Buckets de S3
@@ -288,6 +304,30 @@ Una implementación compatible podría responder:
 Esto es un **ejemplo de contrato**, no una garantía de que la versión desplegada contenga esa ruta. `GET /health` es una comprobación sencilla **solo si se ha implementado en el código**.
 
 Para `POST /process`, el handler puede esperar un JSON como `{"image_key":"statue_small.jpg"}` en el campo `body` del evento HTTP y obtener el bucket de una variable de entorno o de un parámetro explícito (según la implementación). Hay que analizar/decodificar `body`, validar los campos y devolver `statusCode` y `body`. El objeto solicitado **debe existir ya en el bucket de imágenes**. La función debe seguir distinguiendo los eventos SQS (`Records`) de los eventos HTTP.
+
+### 9.2bis. Opción rápida: crear y probar la HTTP API con scripts (boto3)
+
+Los apartados 9.3 y 9.4 se pueden automatizar por completo. El script hace lo mismo que la consola: crea la HTTP API `ImageProcessingAPI`, la integración Lambda proxy (payload 2.0), las rutas `GET /health` y `POST /process`, el stage `$default` con auto-deploy y el **permiso de invocación** de API Gateway sobre la Lambda.
+
+```bash
+python setup_scripts/create_api_gateway.py
+```
+
+Se puede ejecutar varias veces sin crear duplicados: si la API, la integración, las rutas, el stage o el permiso ya existen, los reutiliza. Guarda `api-id` y `api-endpoint` en `aws_resources.db` (consúltalos con `python show_shelve.py`).
+
+Para probarla (la imagen tiene que estar ya en el bucket de imágenes, ver paso 5):
+```bash
+python setup_scripts/test_api_gateway.py                  # usa statue_small.jpg
+python setup_scripts/test_api_gateway.py woodcutters.jpg  # otra imagen
+```
+
+Para borrar todo lo creado por la práctica (API, Lambda y su trigger SQS, cola, tabla DynamoDB y buckets), usa `remove_aws_resources.py`. Solo borra lo registrado en `aws_resources.db`; sin `--really-delete` solo muestra lo que borraría:
+```bash
+python remove_aws_resources.py                  # simulación
+python remove_aws_resources.py --really-delete  # borrar
+```
+
+Si usas los scripts, puedes saltar a **9.6** para comprobar el resultado de extremo a extremo. Los apartados 9.3–9.5 explican el mismo proceso desde la consola.
 
 ### 9.3. Crear una HTTP API desde AWS Console
 

@@ -151,6 +151,10 @@ def overwrite():
 check_role_account()
 print(f"Lambda package built ({len(LAMBDA_CODE)} bytes)")
 
+# Record the function so remove_aws_resources.py knows it belongs to this project.
+with shelve.open("aws_resources.db") as db:
+    db["lambda-function"] = FUNCTION_NAME
+
 try:
     resp = create()
     print("Lambda function created:", resp)
