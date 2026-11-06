@@ -1,86 +1,450 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Thumbnails Gallery</title>
+  <title>Thumbnails · Image Pipeline</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,300..900&family=Martian+Mono:wdth,wght@75..112.5,300..700&family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg:#0b0d11; --fg:#e6e6e6; --muted:#9aa3af; --card:#111827; }
-    body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    header { padding:24px; max-width:1100px; margin:0 auto; }
-    h1 { margin:0 0 6px; font-size:24px; }
-    .sub { color:var(--muted); font-size:14px; }
-    #status { color:var(--muted); padding:0 24px; max-width:1100px; margin:0 auto; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; padding:24px; max-width:1100px; margin:0 auto; }
-    .card { background:var(--card); border-radius:16px; text-decoration:none; color:inherit; box-shadow:0 4px 10px rgba(0,0,0,.2); overflow:hidden; display:flex; flex-direction:column; }
-    img { width:100%; height:160px; object-fit:cover; display:block; background:#0b0d11; }
-    .name { padding:10px 12px; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    footer { color:var(--muted); text-align:center; padding:24px; }
+    :root {
+      /* palette */
+      --cobalt: #1E22AA;     /* ground */
+      --cobalt-2: #2A2FD0;   /* raised ground / grid lines */
+      --ink: #0B0C3A;        /* deep panels, frame mats */
+      --paper: #F2F0FF;      /* primary text */
+      --magenta: #FF3DA8;    /* signal: motion, shadows, highlights */
+      --ice: #7EF0FF;        /* data: mono readouts */
+      --dim: #AEB2F5;        /* secondary text on cobalt */
+
+      --f-display: "Anybody", "Arial Black", sans-serif;
+      --f-body: "Schibsted Grotesk", system-ui, sans-serif;
+      --f-mono: "Martian Mono", ui-monospace, Consolas, monospace;
+
+      --gutter: clamp(16px, 4vw, 48px);
+      --max: 1320px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { background: var(--cobalt); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--paper);
+      font: 400 16px/1.55 var(--f-body);
+      background:
+        radial-gradient(1200px 600px at 85% -10%, rgba(255, 61, 168, .28), transparent 60%),
+        radial-gradient(900px 500px at -10% 30%, rgba(126, 240, 255, .14), transparent 60%),
+        linear-gradient(var(--cobalt-2) 1px, transparent 1px) 0 0 / 32px 32px,
+        linear-gradient(90deg, var(--cobalt-2) 1px, transparent 1px) 0 0 / 32px 32px,
+        var(--cobalt);
+      overflow-x: hidden;
+    }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid var(--ice); outline-offset: 3px; }
+
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); }
+
+    /* ---------- telemetry bar ---------- */
+    .telemetry {
+      border-bottom: 1px solid rgba(126, 240, 255, .35);
+      background: rgba(11, 12, 58, .55);
+      backdrop-filter: blur(6px);
+      font: 400 11px/1 var(--f-mono);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .telemetry .wrap {
+      display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: center;
+      padding-top: 12px; padding-bottom: 12px;
+    }
+    .telemetry b { color: var(--ice); font-weight: 500; }
+    .live { display: inline-flex; align-items: center; gap: 8px; color: var(--paper); margin-left: auto; }
+    .live i {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--magenta);
+      box-shadow: 0 0 0 0 rgba(255, 61, 168, .7); animation: ping 1.8s infinite;
+    }
+    .live[data-state="ok"] i { background: var(--ice); box-shadow: 0 0 0 0 rgba(126, 240, 255, .7); }
+    .live[data-state="error"] i { animation: none; }
+    @keyframes ping { 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+    /* ---------- hero ---------- */
+    .hero { padding: clamp(40px, 8vw, 96px) 0 clamp(24px, 4vw, 48px); position: relative; }
+    .eyebrow {
+      font: 500 12px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ice);
+      display: flex; align-items: center; gap: 12px; margin: 0 0 20px;
+    }
+    .eyebrow::before { content: ""; width: 40px; height: 2px; background: var(--magenta); }
+
+    .title {
+      margin: 0;
+      font-family: var(--f-display);
+      font-weight: 900;
+      font-stretch: 150%;
+      font-variation-settings: "wdth" 150;
+      font-size: clamp(44px, 11.5vw, 176px);
+      line-height: .82;
+      letter-spacing: -.035em;
+      text-transform: uppercase;
+      display: grid;
+    }
+    .title .row { display: block; }
+    .title .outline {
+      color: transparent;
+      -webkit-text-stroke: 2px var(--paper);
+      font-variation-settings: "wdth" 50;
+      font-stretch: 50%;
+      font-weight: 300;
+      letter-spacing: 0;
+    }
+    .title .count {
+      color: var(--magenta);
+      font-variant-numeric: tabular-nums;
+      text-shadow: 6px 6px 0 var(--ink);
+    }
+
+    .lede { max-width: 56ch; margin: 28px 0 0; font-size: clamp(16px, 1.6vw, 19px); color: var(--dim); }
+    .lede strong { color: var(--paper); font-weight: 500; }
+
+    /* ---------- pipeline (signature) ---------- */
+    .pipeline {
+      margin: clamp(36px, 6vw, 64px) 0 0;
+      position: relative;
+      background: var(--ink);
+      border: 1px solid rgba(126, 240, 255, .35);
+      box-shadow: 10px 10px 0 var(--magenta);
+      padding: 28px clamp(16px, 3vw, 32px) 24px;
+    }
+    .pipeline-head {
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      font: 400 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--dim);
+      margin-bottom: 24px;
+    }
+    .stages {
+      list-style: none; margin: 0; padding: 0;
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+      position: relative;
+    }
+    .track {
+      position: absolute; left: 10%; right: 10%; top: 22px; height: 2px;
+      background: repeating-linear-gradient(90deg, rgba(126, 240, 255, .55) 0 8px, transparent 8px 14px);
+      overflow: visible;
+    }
+    .packet {
+      position: absolute; top: -4px; left: 0; width: 26px; height: 10px;
+      background: var(--magenta); box-shadow: 0 0 18px var(--magenta);
+      animation: flow 4.8s linear infinite;
+    }
+    .packet:nth-child(2) { animation-delay: -1.6s; background: var(--ice); box-shadow: 0 0 18px var(--ice); }
+    .packet:nth-child(3) { animation-delay: -3.2s; }
+    @keyframes flow { from { left: 0; } to { left: calc(100% - 26px); } }
+
+    .stage { position: relative; text-align: center; padding: 0 6px; }
+    .node {
+      width: 46px; height: 46px; margin: 0 auto 14px; position: relative; z-index: 1;
+      display: grid; place-items: center;
+      background: var(--cobalt); border: 2px solid var(--ice);
+      font: 700 13px/1 var(--f-mono); color: var(--ice);
+      transform: rotate(45deg);
+    }
+    .node span { transform: rotate(-45deg); }
+    .stage:nth-child(4) .node { border-color: var(--magenta); color: var(--magenta); } /* Lambda: the step that does the work */
+    .svc {
+      font-family: var(--f-display); font-weight: 800; font-variation-settings: "wdth" 120; font-stretch: 120%;
+      font-size: clamp(14px, 1.7vw, 22px); line-height: 1; text-transform: uppercase; letter-spacing: -.01em;
+    }
+    .what { margin-top: 6px; font-size: 13px; color: var(--dim); line-height: 1.35; }
+
+    /* ---------- controls ---------- */
+    .bar {
+      display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px;
+      margin: clamp(48px, 8vw, 88px) 0 24px;
+      border-bottom: 2px solid var(--paper); padding-bottom: 14px;
+    }
+    .bar h2 {
+      margin: 0; font-family: var(--f-display); font-weight: 900;
+      font-variation-settings: "wdth" 150; font-stretch: 150%;
+      font-size: clamp(24px, 4vw, 44px); line-height: .9; text-transform: uppercase; letter-spacing: -.02em;
+    }
+    .sort { display: flex; gap: 6px; align-items: center; font: 400 11px/1 var(--f-mono); text-transform: uppercase; }
+    .sort > span { color: var(--dim); margin-right: 6px; letter-spacing: .08em; }
+    .sort button {
+      font: inherit; letter-spacing: .06em; cursor: pointer;
+      color: var(--paper); background: transparent; border: 1px solid rgba(242, 240, 255, .5);
+      padding: 9px 12px;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .sort button:hover { border-color: var(--ice); color: var(--ice); }
+    .sort button[aria-pressed="true"] { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+
+    #status { font: 400 13px/1.6 var(--f-mono); color: var(--ice); margin: 0 0 24px; min-height: 1.6em; }
+    #status[data-state="error"] { color: var(--paper); background: var(--ink); border-left: 4px solid var(--magenta); padding: 14px 16px; }
+
+    /* ---------- grid of frames ---------- */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+      gap: clamp(18px, 2.4vw, 32px);
+      padding-bottom: 96px;
+    }
+    .frame {
+      --i: 0;
+      display: flex; flex-direction: column; text-decoration: none;
+      background: var(--ink);
+      border: 1px solid rgba(126, 240, 255, .25);
+      box-shadow: 6px 6px 0 rgba(11, 12, 58, .9);
+      transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s;
+      animation: develop .7s cubic-bezier(.2, .8, .2, 1) both;
+      animation-delay: calc(var(--i) * 60ms);
+      position: relative;
+    }
+    .frame:hover, .frame:focus-visible { transform: translate(-4px, -4px); box-shadow: 10px 10px 0 var(--magenta); }
+    @keyframes develop { from { opacity: 0; clip-path: inset(0 0 100% 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+
+    .shot { position: relative; aspect-ratio: 4 / 3; margin: 10px 10px 0; overflow: hidden; background: var(--cobalt); }
+    .shot img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s; }
+    .frame:hover .shot img { transform: scale(1.05); }
+    /* crop marks */
+    .shot::before, .shot::after {
+      content: ""; position: absolute; width: 16px; height: 16px; z-index: 1; pointer-events: none;
+      border: 2px solid var(--ice);
+    }
+    .shot::before { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+    .shot::after { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+    .plate { padding: 12px 12px 14px; display: grid; gap: 8px; }
+    .fname {
+      font: 700 15px/1.2 var(--f-body);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .meta {
+      display: flex; justify-content: space-between; gap: 8px;
+      font: 400 10.5px/1 var(--f-mono); color: var(--ice); text-transform: uppercase; letter-spacing: .04em;
+    }
+    .meta span:last-child { color: var(--dim); }
+
+    /* empty state */
+    .empty {
+      grid-column: 1 / -1; padding: clamp(32px, 6vw, 64px);
+      border: 2px dashed rgba(126, 240, 255, .5); background: rgba(11, 12, 58, .5);
+    }
+    .empty h3 {
+      margin: 0 0 10px; font-family: var(--f-display); font-weight: 800;
+      font-variation-settings: "wdth" 130; font-stretch: 130%; font-size: clamp(22px, 3vw, 32px); text-transform: uppercase;
+    }
+    .empty p { margin: 0; color: var(--dim); }
+    code { font: 400 .88em var(--f-mono); color: var(--ice); background: rgba(11, 12, 58, .7); padding: 2px 6px; }
+
+    footer {
+      border-top: 1px solid rgba(126, 240, 255, .35);
+      font: 400 11px/1.6 var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--dim);
+    }
+    footer .wrap { padding-top: 20px; padding-bottom: 28px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+    /* ---------- responsive ---------- */
+    @media (max-width: 720px) {
+      .stages { grid-template-columns: 1fr; gap: 18px; }
+      .track { left: 22px; right: auto; top: 10px; bottom: 10px; width: 2px; height: auto;
+        background: repeating-linear-gradient(180deg, rgba(126, 240, 255, .55) 0 8px, transparent 8px 14px); }
+      .packet { left: -4px; width: 10px; height: 22px; animation-name: flow-v; }
+      @keyframes flow-v { from { top: 0; } to { top: calc(100% - 22px); } }
+      .stage { display: grid; grid-template-columns: 46px 1fr; gap: 0 18px; text-align: left; align-items: center; padding: 0; }
+      .node { margin: 0; grid-row: span 2; }
+      .what { margin-top: 2px; }
+      .live { margin-left: 0; }
+      .title .count { text-shadow: 4px 4px 0 var(--ink); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .packet { display: none; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Thumbnails Gallery</h1>
-    <div class="sub">Auto-discovered from the <code>thumbnails/</code> prefix.</div>
-    <div id="status">Loading…</div>
+  <div class="telemetry" role="contentinfo" aria-label="Origen de los datos">
+    <div class="wrap">
+      <span>Bucket <b id="t-bucket">—</b></span>
+      <span>Prefijo <b>thumbnails/</b></span>
+      <span>Región <b>us-east-1</b></span>
+      <span class="live" id="live" data-state="loading"><i aria-hidden="true"></i><span id="live-text">Leyendo S3…</span></span>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Salida del pipeline de imágenes</p>
+      <h1 class="title" aria-label="Thumbnails procesados">
+        <span class="row">Thumb<span class="outline">nails</span></span>
+        <span class="row"><span class="count" id="count">00</span> <span class="outline">listos</span></span>
+      </h1>
+      <p class="lede">Cada imagen de esta página llegó a S3, pasó por la cola SQS, la procesó Lambda y quedó registrada en DynamoDB. <strong>Si una imagen no aparece, no completó el recorrido.</strong></p>
+
+      <section class="pipeline" aria-label="Recorrido de cada imagen">
+        <div class="pipeline-head"><span>Recorrido de cada imagen</span><span>S3 → S3</span></div>
+        <ol class="stages">
+          <div class="track" aria-hidden="true"><span class="packet"></span><span class="packet"></span><span class="packet"></span></div>
+          <li class="stage"><div class="node"><span>1</span></div><div class="svc">S3</div><div class="what">Recibe la imagen original</div></li>
+          <li class="stage"><div class="node"><span>2</span></div><div class="svc">SQS</div><div class="what">Encola el aviso de procesado</div></li>
+          <li class="stage"><div class="node"><span>3</span></div><div class="svc">Lambda</div><div class="what">Lee el mensaje y copia la imagen</div></li>
+          <li class="stage"><div class="node"><span>4</span></div><div class="svc">DynamoDB</div><div class="what">Guarda URLs y tamaño</div></li>
+          <li class="stage"><div class="node"><span>5</span></div><div class="svc">S3</div><div class="what">Publica el thumbnail aquí</div></li>
+        </ol>
+      </section>
+    </div>
   </header>
-  <main id="grid" class="grid"></main>
-  <footer>Generated in your browser</footer>
+
+  <main class="wrap">
+    <div class="bar">
+      <h2>Galería</h2>
+      <div class="sort" role="group" aria-label="Ordenar thumbnails">
+        <span>Ordenar</span>
+        <button type="button" data-sort="date" aria-pressed="true">Recientes</button>
+        <button type="button" data-sort="name" aria-pressed="false">Nombre</button>
+        <button type="button" data-sort="size" aria-pressed="false">Tamaño</button>
+      </div>
+    </div>
+    <p id="status" role="status">Leyendo el prefijo thumbnails/…</p>
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>S3 · SQS · Lambda · DynamoDB</span>
+      <span>Listado generado en tu navegador desde la API de S3</span>
+    </div>
+  </footer>
 
 <script>
   const PREFIX = "thumbnails/";
+  const host = location.hostname;
 
-  function listingUrl(continuationToken) {
-    // When served from S3 Website Hosting, same-origin works:
-    const base = location.origin;
+  // The S3 *website* endpoint cannot list objects (it answers every request with
+  // index.html), so move to the REST endpoint of the same bucket, which can.
+  if (host.includes(".s3-website")) {
+    const bucket = host.split(".s3-website")[0];
+    location.replace(`https://${bucket}.s3.amazonaws.com/index.html`);
+  }
+
+  const bucketName = host.includes(".s3") ? host.split(".s3")[0] : host || "local";
+  document.getElementById("t-bucket").textContent = bucketName;
+
+  const $ = id => document.getElementById(id);
+  let items = [];
+  let sortKey = "date";
+
+  function listingUrl(token) {
     const params = new URLSearchParams({ "list-type": "2", "prefix": PREFIX, "max-keys": "1000" });
-    if (continuationToken) params.set("continuation-token", continuationToken);
-    return `${base}/?${params.toString()}`;
+    if (token) params.set("continuation-token", token);
+    return `${location.origin}/?${params}`;
   }
-  function objectUrl(key) { return `${location.origin}/${encodeURIComponent(key)}`; }
+  // Encode each path segment, keeping "/" as a separator.
+  const objectUrl = key => `${location.origin}/${key.split("/").map(encodeURIComponent).join("/")}`;
 
-  async function listAllKeys() {
-    const keys = [];
+  async function listAll() {
+    const out = [];
     let token = null;
-    while (true) {
+    do {
       const res = await fetch(listingUrl(token));
-      if (!res.ok) throw new Error(`List error: ${res.status} ${res.statusText}`);
-      const xml = await res.text();
-      const doc = new DOMParser().parseFromString(xml, "application/xml");
-
-      const contents = Array.from(doc.getElementsByTagName("Contents"));
-      contents.forEach(c => {
-        const key = c.getElementsByTagName("Key")[0]?.textContent || "";
-        if (!key.endsWith("/") && /\.(jpe?g|png|webp|gif|bmp|tiff)$/i.test(key)) keys.push(key);
-      });
-
-      const isTruncated = doc.getElementsByTagName("IsTruncated")[0]?.textContent === "true";
-      if (!isTruncated) break;
-      token = doc.getElementsByTagName("NextContinuationToken")[0]?.textContent || null;
-    }
-    return keys;
+      if (!res.ok) {
+        const err = new Error(`S3 respondió ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+      const doc = new DOMParser().parseFromString(await res.text(), "application/xml");
+      const tag = (el, name) => el.getElementsByTagName(name)[0]?.textContent || "";
+      for (const c of doc.getElementsByTagName("Contents")) {
+        const key = tag(c, "Key");
+        if (key.endsWith("/") || !/\.(jpe?g|png|webp|gif|bmp|tiff?)$/i.test(key)) continue;
+        out.push({ key, name: key.split("/").pop(), size: +tag(c, "Size") || 0, date: new Date(tag(c, "LastModified")) });
+      }
+      token = tag(doc, "IsTruncated") === "true" ? tag(doc, "NextContinuationToken") : null;
+    } while (token);
+    return out;
   }
 
-  function render(keys) {
-    const status = document.getElementById("status");
-    const grid = document.getElementById("grid");
-    if (!keys.length) { status.textContent = "No images found under thumbnails/."; return; }
-    status.textContent = `Loaded ${keys.length} thumbnails.`;
+  const fmtSize = b => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+  const fmtDate = d => isNaN(d) ? "—" : d.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
+  function sorted() {
+    const list = [...items];
+    if (sortKey === "name") list.sort((a, b) => a.name.localeCompare(b.name, "es"));
+    if (sortKey === "size") list.sort((a, b) => b.size - a.size);
+    if (sortKey === "date") list.sort((a, b) => b.date - a.date);
+    return list;
+  }
+
+  function render() {
+    const grid = $("grid");
+    grid.replaceChildren();
+    if (!items.length) {
+      grid.innerHTML = `<div class="empty"><h3>Aún no hay thumbnails</h3>
+        <p>Sube imágenes con <code>python setup_scripts/upload_folder_images.py</code>. Lambda las procesa en unos segundos; recarga la página para verlas.</p></div>`;
+      return;
+    }
     const frag = document.createDocumentFragment();
-    keys.forEach(k => {
+    sorted().forEach((it, i) => {
       const a = document.createElement("a");
-      a.className = "card"; a.href = objectUrl(k); a.target = "_blank"; a.rel = "noopener";
-      const img = document.createElement("img"); img.src = objectUrl(k); img.alt = k.split("/").pop(); img.loading = "lazy";
-      const name = document.createElement("div"); name.className = "name"; name.textContent = k.split("/").pop();
-      a.append(img, name); frag.appendChild(a);
+      a.className = "frame"; a.href = objectUrl(it.key); a.target = "_blank"; a.rel = "noopener";
+      a.style.setProperty("--i", Math.min(i, 20));
+      a.setAttribute("aria-label", `Abrir ${it.name} a tamaño completo`);
+      a.innerHTML = `<div class="shot"><img loading="lazy" alt=""></div>
+        <div class="plate"><div class="fname"></div><div class="meta"><span></span><span></span></div></div>`;
+      a.querySelector("img").src = objectUrl(it.key);
+      a.querySelector("img").alt = it.name;
+      a.querySelector(".fname").textContent = it.name;
+      const [s, d] = a.querySelectorAll(".meta span");
+      s.textContent = fmtSize(it.size);
+      d.textContent = fmtDate(it.date);
+      frag.appendChild(a);
     });
     grid.appendChild(frag);
   }
 
+  function countUp(n) {
+    const el = $("count");
+    const pad = v => String(v).padStart(2, "0");
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || n === 0) { el.textContent = pad(n); return; }
+    const t0 = performance.now(), dur = 900;
+    const step = t => {
+      const p = Math.min(1, (t - t0) / dur);
+      el.textContent = pad(Math.round(n * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function setLive(state, text) { $("live").dataset.state = state; $("live-text").textContent = text; }
+
+  document.querySelectorAll(".sort button").forEach(btn => btn.addEventListener("click", () => {
+    sortKey = btn.dataset.sort;
+    document.querySelectorAll(".sort button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+    render();
+  }));
+
   (async () => {
-    try { render(await listAllKeys()); }
-    catch (e) { document.getElementById("status").textContent = "Error: " + (e?.message || e); console.error(e); }
+    const status = $("status");
+    try {
+      items = await listAll();
+      countUp(items.length);
+      const total = items.reduce((s, it) => s + it.size, 0);
+      status.textContent = items.length
+        ? `${items.length} thumbnail${items.length === 1 ? "" : "s"} · ${fmtSize(total)} en total`
+        : "";
+      setLive("ok", "Sincronizado");
+      render();
+    } catch (e) {
+      console.error(e);
+      setLive("error", "Sin acceso");
+      status.dataset.state = "error";
+      status.textContent = e.status === 403
+        ? "S3 no permite listar el bucket (403). Ejecuta python setup_scripts/deploy_static_site.py para aplicar la política pública de lectura."
+        : location.protocol === "file:"
+          ? "Esta página lee el bucket en el que está alojada. Ábrela desde la URL de S3, no como archivo local."
+          : `No se pudo leer el bucket: ${e.message}. Revisa la consola del navegador.`;
+    }
   })();
 </script>
 </body>

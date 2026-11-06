@@ -24,13 +24,14 @@ Este proyecto integra varios servicios de AWS para procesar imágenes subidas a 
 - **Boto3** para interacción con AWS.
 
 ### Credenciales
-Crea un archivo `.env` en la raíz del proyecto con las siguientes variables:
+Copia `.env.example` como `.env` en la raíz del proyecto y rellénalo con las credenciales de Learner Lab (**AWS Details → AWS CLI**). Los nombres van en mayúsculas, que es como los leen los scripts:
 ```plaintext
-aws_access_key_id=YOUR_ACCESS_KEY
-aws_secret_access_key=YOUR_SECRET_KEY
-aws_session_token=YOUR_SESSION_TOKEN
-aws_default_region=us-east-1
+AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY
+AWS_SESSION_TOKEN=YOUR_SESSION_TOKEN
+AWS_DEFAULT_REGION=us-east-1
 ```
+Las credenciales del lab caducan al cerrar la sesión: cuando las renueves, actualiza el `.env` y vuelve a ejecutar `get_LabRole_arn.py`.
 
 ---
 
@@ -114,24 +115,19 @@ aws dynamodb list-tables
 ---
 
 ### 4. Configurar la Función Lambda
-0. Ejecutar comando para recuperar referencia a LabRole:
+0. Ejecutar comando para recuperar referencia a LabRole (vuelve a ejecutarlo cada vez que cambies las credenciales del `.env`, p. ej. al reiniciar el lab):
   ```bash
-   python .\setup_scripts\get_LabRole_arn.py
+   python setup_scripts/get_LabRole_arn.py
    ```
 
-1. Empaqueta la función Lambda:
+1. Empaquetado: **no hace falta hacerlo a mano**. `configure_lambda.py` genera el ZIP en memoria con `lambda_function.py` (boto3 ya viene incluido en el runtime de Lambda, y el comando `zip` no existe en Git Bash para Windows).
 Nota de esta versión: el procesamiento de miniaturas con Pillow está desactivado temporalmente para evitar incompatibilidades al empaquetar dependencias nativas en Windows. No se generan thumbnails hasta habilitar un paquete compatible con el runtime Linux de Lambda. API Gateway no cambia esta limitación.
-   ```bash
-   cd lambda_function/
-   pip install -r requirements.txt -t .
-   zip -r lambda_function.zip .
-   cd ..
-   ```
 
-2. Configura la función Lambda:
+2. Configura la función Lambda (la crea o, si ya existe, actualiza su código y configuración):
    ```bash
    python setup_scripts/configure_lambda.py
    ```
+   El script configura estas variables de entorno de la Lambda a partir de `aws_resources.db`: `SOURCE_BUCKET` (bucket de imágenes), `THUMB_BUCKET` (bucket de thumbnails) y `TABLE_NAME` (tabla DynamoDB).
 
 3. Configura el trigger de SQS para Lambda:
    ```bash
@@ -149,9 +145,9 @@ Nota de esta versión: el procesamiento de miniaturas con Pillow está desactiva
 ---
 
 ### 6. Verificar Resultados
-1. **Bucket de Thumbnails**:
+1. **Bucket de Thumbnails** (consulta el nombre real con `python show_shelve.py`, clave `thumbnails-bucket`):
    ```bash
-   aws s3 ls s3://image-thumbnails-bucket-unique-id/
+   aws s3 ls s3://<thumbnails-bucket>/thumbnails/
    ```
 
 2. **Tabla DynamoDB**:
@@ -175,11 +171,10 @@ Nota de esta versión: el procesamiento de miniaturas con Pillow está desactiva
    python setup_scripts/deploy_static_site.py
    ```
 
-3. Accede a la página web:
+3. Accede a la página web con la URL que imprime el script (sustituye `<thumbnails-bucket>` por el nombre real):
    ```
-   http://image-thumbnails-bucket-unique-id.s3-website-us-east-1.amazonaws.com/index.html 
-   https://image-thumbnails-bucket-20251017-6761b8f5.s3.amazonaws.com/index.html
-   
+   http://<thumbnails-bucket>.s3-website-us-east-1.amazonaws.com/
+   https://<thumbnails-bucket>.s3.amazonaws.com/index.html
    ```
 
 
@@ -376,6 +371,8 @@ En PowerShell, usa `curl.exe` en lugar del alias `curl` si quieres el comportami
 | `403 Forbidden` | Autorización, política o URL de invocación incorrecta | Revisa Authorization, permisos y URL |
 | `POST /process` falla aunque SQS funciona | Lambda solo implementa formato SQS | Añade tratamiento de eventos HTTP API v2 y vuelve a desplegar |
 | `TimeoutError` / `ConnectionClosedError` al ejecutar `configure_lambda.py` | Timeout al subir el paquete de despliegue | Comprueba si la función ya existe; utiliza ZIP en S3 y actualiza el código desde allí |
+| `labrole-arn is from account X but your .env credentials are for account Y` | El ARN de LabRole guardado es de una sesión o cuenta anterior | Ejecuta `python setup_scripts/get_LabRole_arn.py` y repite |
+| `FileNotFoundError: lambda_function.zip` | Versión antigua de `configure_lambda.py` | Actualiza el script: ahora genera el ZIP en memoria |
 | `TableName=None` al crear DynamoDB | Falta `dynamodb-table` en `aws_resources.db` | Usa `db.get("dynamodb-table") or "ImageMetadata"` y guarda el nombre en el shelve |
 | `sts:AssumeRole AccessDenied` | Restricción IAM de Learner Lab | Usa el rol y los permisos autorizados por el laboratorio; no intentes eludir la restricción |
 

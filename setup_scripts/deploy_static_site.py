@@ -84,13 +84,8 @@ s3.put_bucket_website(
     }
 )
 
-# 7) Informar URL del website
+# 7) Informar URLs
 region = s3.meta.region_name or "us-east-1"
-website_host = (
-    "s3.us-east-1.amazonaws.com"
-    if region == "us-east-1"
-    else f"s3.{region}.amazonaws.com"
-)
 print(f"Página web subida a s3://{bucket_name}/index.html")
-print(f"URL (pública si la policy se aplicó): https://{bucket_name}.{website_host}/index.html")
-
+print(f"Website (HTTP):  http://{bucket_name}.s3-website-{region}.amazonaws.com/")
+print(f"Objeto (HTTPS):  https://{bucket_name}.s3.amazonaws.com/index.html")

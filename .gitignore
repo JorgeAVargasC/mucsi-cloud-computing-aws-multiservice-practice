@@ -2,4 +2,3 @@
 aws_resources.db*
 __pycache__/
 *.pyc
-lambda_function/lambda_function.zip

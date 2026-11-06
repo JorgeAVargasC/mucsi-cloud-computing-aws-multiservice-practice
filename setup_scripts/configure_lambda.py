@@ -1,6 +1,8 @@
+import io
 import os
 import time
 import shelve
+import zipfile
 import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
@@ -17,11 +19,20 @@ MEMORY = 128
 with shelve.open("aws_resources.db", flag="r") as db:
     ROLE_ARN = db.get("labrole-arn")
     THUMB_BUCKET = db.get("thumbnails-bucket")
+    SOURCE_BUCKET = db.get("images-bucket")
+    TABLE_NAME = db.get("dynamodb-table") or "ImageMetadata"
 
 if not ROLE_ARN:
-    raise RuntimeError("Missing 'labrole-arn' in aws_resources.db")
-if not THUMB_BUCKET:
-    raise RuntimeError("Missing 'thumbnails-bucket' in aws_resources.db")
+    raise RuntimeError("Missing 'labrole-arn' in aws_resources.db (run get_LabRole_arn.py)")
+if not THUMB_BUCKET or not SOURCE_BUCKET:
+    raise RuntimeError("Missing buckets in aws_resources.db (run create_s3_buckets.py)")
+
+# Variables the Lambda code reads (see lambda_function/lambda_function.py)
+LAMBDA_ENV = {
+    "THUMB_BUCKET": THUMB_BUCKET,
+    "SOURCE_BUCKET": SOURCE_BUCKET,
+    "TABLE_NAME": TABLE_NAME,
+}
 
 lambda_client = boto3.client(
     "lambda",
@@ -31,8 +42,38 @@ lambda_client = boto3.client(
     region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
 )
 
-with open("lambda_function/lambda_function.zip", "rb") as f:
-    LAMBDA_CODE = f.read()
+# The ZIP only needs lambda_function.py: boto3 is already included in the Lambda
+# runtime. It is built here with zipfile, so the `zip` command (missing in Git Bash
+# on Windows) is not needed.
+LAMBDA_SOURCE = os.path.join(os.path.dirname(__file__), "..", "lambda_function", "lambda_function.py")
+
+
+def build_zip():
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(LAMBDA_SOURCE, arcname="lambda_function.py")
+    return buf.getvalue()
+
+
+LAMBDA_CODE = build_zip()
+
+
+def check_role_account():
+    """LabRole must belong to the same account as the current credentials."""
+    sts = boto3.client(
+        "sts",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
+        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+    )
+    account = sts.get_caller_identity()["Account"]
+    role_account = ROLE_ARN.split(":")[4]
+    if account != role_account:
+        raise RuntimeError(
+            f"labrole-arn is from account {role_account} but your .env credentials are "
+            f"for account {account}. Run: python setup_scripts/get_LabRole_arn.py"
+        )
 
 def wait_until_ready(name, timeout=300, poll=3):
     """Wait until the function is Active and last update is Successful."""
@@ -60,7 +101,7 @@ def create():
         Code={"ZipFile": LAMBDA_CODE},
         Timeout=TIMEOUT,
         MemorySize=MEMORY,
-        Environment={"Variables": {"THUMB_BUCKET": THUMB_BUCKET}},
+        Environment={"Variables": LAMBDA_ENV},
         Publish=True,
     )
     # Wait until it's ready before returning
@@ -83,12 +124,12 @@ def overwrite():
             time.sleep(3)
     wait_until_ready(FUNCTION_NAME)
 
-    # 2) Update configuration (including env var THUMB_BUCKET)
+    # 2) Update configuration (including env vars)
     print(f"Updating configuration for {FUNCTION_NAME} …")
     # Merge any existing env vars:
     cfg = lambda_client.get_function_configuration(FunctionName=FUNCTION_NAME)
     env_vars = dict(cfg.get("Environment", {}).get("Variables", {}))
-    env_vars["THUMB_BUCKET"] = THUMB_BUCKET
+    env_vars.update(LAMBDA_ENV)
 
     while True:
         try:
@@ -107,6 +148,9 @@ def overwrite():
     wait_until_ready(FUNCTION_NAME)
     return resp
 
+check_role_account()
+print(f"Lambda package built ({len(LAMBDA_CODE)} bytes)")
+
 try:
     resp = create()
     print("Lambda function created:", resp)
@@ -122,34 +166,3 @@ except ClientError as e:
     else:
         raise
 
-"""
-import os
-import boto3
-from dotenv import load_dotenv
-
-load_dotenv()  # loads .env into environment
-
-# simplest: rely on boto3's default provider chain (reads the env vars above)
-lambda_client = boto3.client(
-     "lambda",
-     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-     aws_session_token=os.getenv("AWS_SESSION_TOKEN"),  # may be None if not set
-     region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-)
-
-with open('lambda_function/lambda_function.zip', 'rb') as f:
-    lambda_code = f.read()
-
-response = lambda_client.create_function(
-    FunctionName='ImageProcessingFunction',
-    Runtime='python3.8',
-    Role='arn:aws:iam::590183788851:role/LabRole',
-    Handler='lambda_function.lambda_handler',
-    Code={'ZipFile': lambda_code},
-    Timeout=15,
-    MemorySize=128
-)
-
-print("Función Lambda creada:", response)
-"""
